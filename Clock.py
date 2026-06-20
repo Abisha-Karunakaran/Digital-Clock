@@ -74,8 +74,8 @@ dark_mode = True  # tracks current theme
 
 root = tk.Tk()
 root.title("Advanced Digital Clock")
-root.geometry("560x1180")
-root.minsize(480, 900)
+root.geometry("560x800")
+root.minsize(420, 500)
 root.resizable(True, True)
 
 FONT_FAMILY = "Segoe UI"
@@ -166,6 +166,7 @@ def apply_theme():
     theme = THEMES["dark"] if dark_mode else THEMES["light"]
 
     root.configure(bg=theme["bg"])
+    outer_canvas.configure(bg=theme["bg"])
     container.configure(bg=theme["bg"])
 
     for card in cards:
@@ -307,8 +308,38 @@ style.configure("TButton", font=(FONT_FAMILY, 11, "bold"), padding=8, borderwidt
 style.configure("TEntry", font=(FONT_FAMILY, 11), padding=6)
 style.configure("TCombobox", font=(FONT_FAMILY, 11), padding=6)
 
-container = tk.Frame(root)
-container.pack(fill="both", expand=True, padx=20, pady=20)
+# ---- Scrollable container ----
+# Everything is placed inside a Canvas + Scrollbar so that, no matter how
+# small the window or screen is, every card can be reached by scrolling
+# instead of getting cut off / hidden.
+outer_canvas = tk.Canvas(root, highlightthickness=0)
+scrollbar = ttk.Scrollbar(root, orient="vertical", command=outer_canvas.yview)
+outer_canvas.configure(yscrollcommand=scrollbar.set)
+
+outer_canvas.pack(side="left", fill="both", expand=True)
+scrollbar.pack(side="right", fill="y")
+
+container = tk.Frame(outer_canvas)
+container_id = outer_canvas.create_window((0, 0), window=container, anchor="nw")
+
+
+def _on_container_resize(event):
+    """Keep the scrollable area in sync with the content size and window width."""
+    outer_canvas.configure(scrollregion=outer_canvas.bbox("all"))
+    outer_canvas.itemconfig(container_id, width=event.width)
+
+
+outer_canvas.bind("<Configure>", _on_container_resize)
+container.bind("<Configure>", lambda e: outer_canvas.configure(scrollregion=outer_canvas.bbox("all")))
+
+
+def _on_mousewheel(event):
+    outer_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+
+outer_canvas.bind_all("<MouseWheel>", _on_mousewheel)   # Windows mouse wheel
+
+container.configure(padx=20, pady=20)
 
 cards = []           # all "card" frames, so the theme function can recolor them
 section_titles = []  # small section heading labels
