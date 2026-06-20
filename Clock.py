@@ -16,8 +16,15 @@ from tkinter import ttk, messagebox
 from time import strftime
 import datetime
 import math
+import threading
 import pytz
 import pyttsx3
+
+try:
+    import winsound          # built-in on Windows only
+    HAS_WINSOUND = True
+except ImportError:
+    HAS_WINSOUND = False
 
 
 # ================= VOICE ENGINE =================
@@ -30,18 +37,18 @@ engine = pyttsx3.init()
 
 THEMES = {
     "dark": {
-        "bg": "#1e1f29",
-        "card": "#272935",
+        "bg": "#1c121a",      # deep plum-black background
+        "card": "#2f1e2c",    # slightly lighter plum card
         "text": "#f2f2f2",
-        "accent": "#00e0ff",
-        "muted": "#9aa0ad",
+        "accent": "#a87ea0",  # lightened #5e3c58 so it's visible on dark bg
+        "muted": "#9c8a98",
     },
     "light": {
-        "bg": "#f4f5f7",
+        "bg": "#efeced",      # soft plum-tinted white
         "card": "#ffffff",
-        "text": "#1e1f29",
-        "accent": "#0078d4",
-        "muted": "#5b6270",
+        "text": "#2a1b27",
+        "accent": "#5e3c58",  # requested brand color
+        "muted": "#7c6078",
     },
 }
 
@@ -67,8 +74,9 @@ dark_mode = True  # tracks current theme
 
 root = tk.Tk()
 root.title("Advanced Digital Clock")
-root.geometry("480x760")
-root.resizable(False, False)
+root.geometry("560x1180")
+root.minsize(480, 900)
+root.resizable(True, True)
 
 FONT_FAMILY = "Segoe UI"
 
@@ -192,19 +200,43 @@ def toggle_theme():
 
 # ================= ALARM =================
 
+def ring_alarm_tone():
+    """
+    Play an actual audible alarm tone (not just a popup).
+    Runs in a background thread so the GUI doesn't freeze while beeping.
+    """
+    def _ring():
+        if HAS_WINSOUND:
+            for _ in range(6):
+                winsound.Beep(1000, 350)   # 1000Hz tone for 350ms
+        else:
+            # Non-Windows fallback: no winsound, so speak the alert instead
+            engine.say("Alarm! Alarm! Alarm!")
+            engine.runAndWait()
+
+    threading.Thread(target=_ring, daemon=True).start()
+
+
+last_alarm_trigger = None  # remembers the HH:MM the alarm last fired for
+
+
 def check_alarm():
     """
     Compare the alarm time entered by the user (HH:MM, 24-hour format)
-    with the current system time. If they match, show a popup and
-    speak an alert out loud.
+    with the current system time. If they match, play a ringing tone,
+    speak an alert out loud, and show a popup. Only fires once per minute.
     """
+    global last_alarm_trigger
+
     alarm_time = alarm_entry.get()
     current_time = strftime("%H:%M")
 
-    if alarm_time == current_time:
-        messagebox.showinfo("Alarm", "⏰ Alarm Ringing!")
+    if alarm_time and alarm_time == current_time and last_alarm_trigger != current_time:
+        last_alarm_trigger = current_time
+        ring_alarm_tone()
         engine.say("Your alarm is ringing")
         engine.runAndWait()
+        messagebox.showinfo("Alarm", "⏰ Alarm Ringing!")
 
     root.after(1000, check_alarm)
 
