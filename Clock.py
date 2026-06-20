@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from time import strftime
 import datetime
+import math
 import pytz
 import pyttsx3
 
@@ -44,9 +45,9 @@ THEMES = {
     },
 }
 
-# Common timezones for the World Clock dropdown
+# Common timezones for the World Clock dropdown (Sri Lanka listed first / default)
 TIMEZONES = [
-    "Asia/Colombo",
+    "Asia/Colombo (Sri Lanka)",
     "Asia/Kolkata",
     "Asia/Tokyo",
     "Asia/Dubai",
@@ -81,6 +82,75 @@ def update_clock():
     root.after(1000, update_clock)
 
 
+# ---- Analog clock face ----
+
+ANALOG_RADIUS = 80
+ANALOG_CENTER = (ANALOG_RADIUS + 10, ANALOG_RADIUS + 10)
+
+
+def draw_analog_clock():
+    """Redraw the round analog clock face with moving hour/minute/second hands."""
+    canvas.delete("all")
+    cx, cy = ANALOG_CENTER
+    theme = THEMES["dark"] if dark_mode else THEMES["light"]
+
+    # Outer circle (clock face)
+    canvas.create_oval(
+        cx - ANALOG_RADIUS, cy - ANALOG_RADIUS,
+        cx + ANALOG_RADIUS, cy + ANALOG_RADIUS,
+        outline=theme["accent"], width=3, fill=theme["card"]
+    )
+
+    # Hour tick marks (12 of them, every 30 degrees)
+    for i in range(12):
+        angle = math.radians(i * 30 - 90)
+        x1 = cx + (ANALOG_RADIUS - 8) * math.cos(angle)
+        y1 = cy + (ANALOG_RADIUS - 8) * math.sin(angle)
+        x2 = cx + (ANALOG_RADIUS - 1) * math.cos(angle)
+        y2 = cy + (ANALOG_RADIUS - 1) * math.sin(angle)
+        canvas.create_line(x1, y1, x2, y2, fill=theme["muted"], width=2)
+
+    now = datetime.datetime.now()
+    hours = now.hour % 12
+    minutes = now.minute
+    seconds = now.second
+
+    # Hand angles: each unit advances the hand by a fixed number of degrees,
+    # offset by -90 so 12 o'clock points straight up.
+    sec_angle = math.radians(seconds * 6 - 90)
+    min_angle = math.radians(minutes * 6 + seconds * 0.1 - 90)
+    hour_angle = math.radians(hours * 30 + minutes * 0.5 - 90)
+
+    # Hour hand (short + thick)
+    canvas.create_line(
+        cx, cy,
+        cx + (ANALOG_RADIUS * 0.5) * math.cos(hour_angle),
+        cy + (ANALOG_RADIUS * 0.5) * math.sin(hour_angle),
+        fill=theme["text"], width=5, capstyle=tk.ROUND
+    )
+
+    # Minute hand (longer + medium)
+    canvas.create_line(
+        cx, cy,
+        cx + (ANALOG_RADIUS * 0.75) * math.cos(min_angle),
+        cy + (ANALOG_RADIUS * 0.75) * math.sin(min_angle),
+        fill=theme["text"], width=3, capstyle=tk.ROUND
+    )
+
+    # Second hand (longest + thin, accent color)
+    canvas.create_line(
+        cx, cy,
+        cx + (ANALOG_RADIUS * 0.85) * math.cos(sec_angle),
+        cy + (ANALOG_RADIUS * 0.85) * math.sin(sec_angle),
+        fill=theme["accent"], width=2, capstyle=tk.ROUND
+    )
+
+    # Center pin
+    canvas.create_oval(cx - 4, cy - 4, cx + 4, cy + 4, fill=theme["accent"], outline="")
+
+    root.after(1000, draw_analog_clock)
+
+
 # ================= THEME =================
 
 def apply_theme():
@@ -92,6 +162,8 @@ def apply_theme():
 
     for card in cards:
         card.configure(bg=theme["card"])
+
+    canvas.configure(bg=theme["card"])
 
     time_label.configure(bg=theme["card"], fg=theme["accent"])
     date_label.configure(bg=theme["card"], fg=theme["muted"])
@@ -169,7 +241,9 @@ def reset_stopwatch():
 def show_world_time():
     """Look up the current time in the timezone picked from the dropdown."""
     try:
-        timezone = timezone_combo.get()
+        # The dropdown shows a friendly label, e.g. "Asia/Colombo (Sri Lanka)"
+        # — only the part before the space is a real pytz timezone name.
+        timezone = timezone_combo.get().split(" ")[0]
         location_time = datetime.datetime.now(pytz.timezone(timezone))
         world_label.config(text=location_time.strftime("%H:%M:%S"))
     except Exception:
@@ -233,6 +307,13 @@ def make_hint(card, text):
 
 # --- Clock card ---
 clock_card = make_card(container)
+canvas = tk.Canvas(
+    clock_card,
+    width=(ANALOG_RADIUS + 10) * 2,
+    height=(ANALOG_RADIUS + 10) * 2,
+    highlightthickness=0,
+)
+canvas.pack(pady=(4, 10))
 time_label = tk.Label(clock_card, font=(FONT_FAMILY, 40, "bold"))
 time_label.pack(pady=(4, 0))
 date_label = tk.Label(clock_card, font=(FONT_FAMILY, 13))
@@ -281,6 +362,7 @@ calendar_label.pack(pady=(12, 0))
 
 apply_theme()        # paint the initial theme
 update_clock()        # start updating clock every second
+draw_analog_clock()    # start drawing the round analog clock
 check_alarm()          # start checking alarm every second
 stopwatch()            # start stopwatch counting
 
