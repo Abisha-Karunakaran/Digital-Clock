@@ -6,13 +6,13 @@ A Tkinter desktop app with:
     - Dark/Light theme toggle
     - Alarm (checks every second against entered HH:MM)
     - Stopwatch (start/reset)
-    - World clock (timezone lookup)
+    - World clock (pick a timezone from a dropdown)
     - Voice announcement of current time (text-to-speech)
     - Simple calendar display (today's date)
 """
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 from time import strftime
 import datetime
 import pytz
@@ -25,49 +25,97 @@ import pyttsx3
 engine = pyttsx3.init()
 
 
+# ================= COLOR THEMES =================
+
+THEMES = {
+    "dark": {
+        "bg": "#1e1f29",
+        "card": "#272935",
+        "text": "#f2f2f2",
+        "accent": "#00e0ff",
+        "muted": "#9aa0ad",
+    },
+    "light": {
+        "bg": "#f4f5f7",
+        "card": "#ffffff",
+        "text": "#1e1f29",
+        "accent": "#0078d4",
+        "muted": "#5b6270",
+    },
+}
+
+# Common timezones for the World Clock dropdown
+TIMEZONES = [
+    "Asia/Colombo",
+    "Asia/Kolkata",
+    "Asia/Tokyo",
+    "Asia/Dubai",
+    "Asia/Singapore",
+    "Europe/London",
+    "Europe/Paris",
+    "America/New_York",
+    "America/Los_Angeles",
+    "Australia/Sydney",
+    "UTC",
+]
+
+dark_mode = True  # tracks current theme
+
+
 # ================= MAIN WINDOW =================
 
 root = tk.Tk()
 root.title("Advanced Digital Clock")
-root.geometry("650x700")
-root.resizable(False, False)   # fixed size window, looks cleaner
+root.geometry("480x760")
+root.resizable(False, False)
 
-# Tracks whether the app is currently in dark mode (used by change_theme)
-dark_mode = True
+FONT_FAMILY = "Segoe UI"
 
 
 # ================= CLOCK =================
 
 def update_clock():
     """Refresh the time and date labels every second."""
-    current_time = strftime("%I:%M:%S %p")   # e.g. 09:30:15 PM
-    time_label.config(text=current_time)
-
-    current_date = strftime("%A, %d %B %Y")  # e.g. Saturday, 20 June 2026
-    date_label.config(text=current_date)
-
-    # Schedule this function to run again after 1000ms (1 second)
+    time_label.config(text=strftime("%I:%M:%S %p"))
+    date_label.config(text=strftime("%A, %d %B %Y"))
     root.after(1000, update_clock)
 
 
 # ================= THEME =================
 
-def change_theme():
-    """Toggle between dark and light color schemes."""
-    global dark_mode
+def apply_theme():
+    """Repaint every widget using the colors for the current theme."""
+    theme = THEMES["dark"] if dark_mode else THEMES["light"]
 
-    if dark_mode:
-        # Switch to light mode
-        root.configure(bg="white")
-        time_label.config(bg="white", fg="black")
-        date_label.config(bg="white", fg="black")
-        dark_mode = False
-    else:
-        # Switch to dark mode
-        root.configure(bg="black")
-        time_label.config(bg="black", fg="cyan")
-        date_label.config(bg="black", fg="white")
-        dark_mode = True
+    root.configure(bg=theme["bg"])
+    container.configure(bg=theme["bg"])
+
+    for card in cards:
+        card.configure(bg=theme["card"])
+
+    time_label.configure(bg=theme["card"], fg=theme["accent"])
+    date_label.configure(bg=theme["card"], fg=theme["muted"])
+    stopwatch_label.configure(bg=theme["card"], fg=theme["text"])
+    world_label.configure(bg=theme["card"], fg=theme["accent"])
+    calendar_label.configure(bg=theme["card"], fg=theme["text"])
+
+    for widget in section_titles:
+        widget.configure(bg=theme["card"], fg=theme["muted"])
+
+    for widget in hint_labels:
+        widget.configure(bg=theme["card"], fg=theme["muted"])
+
+    style.configure("TButton", background=theme["accent"], foreground="#ffffff")
+    style.configure("TEntry", fieldbackground=theme["bg"])
+    style.configure("TCombobox", fieldbackground=theme["bg"])
+
+    theme_button.config(text="☀️  Light Mode" if dark_mode else "🌙  Dark Mode")
+
+
+def toggle_theme():
+    global dark_mode
+    dark_mode = not dark_mode
+    apply_theme()
 
 
 # ================= ALARM =================
@@ -86,14 +134,13 @@ def check_alarm():
         engine.say("Your alarm is ringing")
         engine.runAndWait()
 
-    # Keep checking every second
     root.after(1000, check_alarm)
 
 
 # ================= STOPWATCH =================
 
-stopwatch_seconds = 0   # total elapsed seconds
-running = True          # stopwatch is always running in this version
+stopwatch_seconds = 0
+running = True
 
 
 def stopwatch():
@@ -102,11 +149,9 @@ def stopwatch():
 
     if running:
         stopwatch_seconds += 1
-
         hours = stopwatch_seconds // 3600
         minutes = (stopwatch_seconds % 3600) // 60
         seconds = stopwatch_seconds % 60
-
         stopwatch_label.config(text=f"{hours:02}:{minutes:02}:{seconds:02}")
 
     stopwatch_label.after(1000, stopwatch)
@@ -122,12 +167,9 @@ def reset_stopwatch():
 # ================= WORLD CLOCK =================
 
 def show_world_time():
-    """
-    Look up the current time in the timezone entered by the user
-    (e.g. 'Asia/Tokyo'). Shows 'Invalid Timezone' if the name is wrong.
-    """
+    """Look up the current time in the timezone picked from the dropdown."""
     try:
-        timezone = country_entry.get()
+        timezone = timezone_combo.get()
         location_time = datetime.datetime.now(pytz.timezone(timezone))
         world_label.config(text=location_time.strftime("%H:%M:%S"))
     except Exception:
@@ -148,57 +190,98 @@ def speak_time():
 def show_calendar():
     """Display today's full date and day name."""
     today = datetime.date.today()
-    calendar_label.config(text=today.strftime("%d %B %Y\n%A"))
+    calendar_label.config(text=today.strftime("%d %B %Y  •  %A"))
 
 
 # ================= GUI LAYOUT =================
 
-root.configure(bg="black")
+style = ttk.Style()
+style.theme_use("clam")
+style.configure("TButton", font=(FONT_FAMILY, 11, "bold"), padding=8, borderwidth=0)
+style.configure("TEntry", font=(FONT_FAMILY, 11), padding=6)
+style.configure("TCombobox", font=(FONT_FAMILY, 11), padding=6)
 
-# --- Time display ---
-time_label = tk.Label(root, font=("Arial", 45, "bold"), bg="black", fg="cyan")
-time_label.pack(pady=20)
+container = tk.Frame(root)
+container.pack(fill="both", expand=True, padx=20, pady=20)
 
-# --- Date display ---
-date_label = tk.Label(root, font=("Arial", 20), bg="black", fg="white")
-date_label.pack()
-
-# --- Theme toggle button ---
-tk.Button(root, text="🌙 Dark / Light Mode", command=change_theme).pack(pady=10)
-
-# --- Alarm section ---
-tk.Label(root, text="Alarm Time (24 Hour HH:MM)").pack()
-alarm_entry = tk.Entry(root)
-alarm_entry.pack()
-
-# --- Stopwatch section ---
-tk.Label(root, text="Stopwatch").pack()
-stopwatch_label = tk.Label(root, text="00:00:00", font=("Arial", 25))
-stopwatch_label.pack()
-tk.Button(root, text="Reset Stopwatch", command=reset_stopwatch).pack()
-
-# --- World clock section ---
-tk.Label(root, text="World Clock Timezone").pack()
-tk.Label(root, text="Example: Asia/Tokyo").pack()
-country_entry = tk.Entry(root)
-country_entry.pack()
-tk.Button(root, text="Show World Time", command=show_world_time).pack()
-world_label = tk.Label(root, font=("Arial", 20))
-world_label.pack()
-
-# --- Voice button ---
-tk.Button(root, text="🔊 Speak Current Time", command=speak_time).pack(pady=10)
-
-# --- Calendar section ---
-tk.Button(root, text="📅 Show Calendar", command=show_calendar).pack()
-calendar_label = tk.Label(root, font=("Arial", 18))
-calendar_label.pack()
+cards = []           # all "card" frames, so the theme function can recolor them
+section_titles = []  # small section heading labels
+hint_labels = []      # small grey hint labels
 
 
-# ================= START BACKGROUND TASKS =================
+def make_card(parent, pad_y=(0, 16)):
+    """Create a card-style section with consistent spacing."""
+    card = tk.Frame(parent, padx=18, pady=16, highlightthickness=0)
+    card.pack(fill="x", pady=pad_y)
+    cards.append(card)
+    return card
 
-update_clock()     # start updating clock every second
-check_alarm()       # start checking alarm every second
-stopwatch()         # start stopwatch counting
+
+def make_section_title(card, text):
+    label = tk.Label(card, text=text, font=(FONT_FAMILY, 10, "bold"), anchor="w")
+    label.pack(fill="x")
+    section_titles.append(label)
+    return label
+
+
+def make_hint(card, text):
+    label = tk.Label(card, text=text, font=(FONT_FAMILY, 9), anchor="w")
+    label.pack(fill="x", pady=(2, 6))
+    hint_labels.append(label)
+    return label
+
+
+# --- Clock card ---
+clock_card = make_card(container)
+time_label = tk.Label(clock_card, font=(FONT_FAMILY, 40, "bold"))
+time_label.pack(pady=(4, 0))
+date_label = tk.Label(clock_card, font=(FONT_FAMILY, 13))
+date_label.pack(pady=(2, 10))
+theme_button = ttk.Button(clock_card, command=toggle_theme)
+theme_button.pack()
+
+# --- Alarm card ---
+alarm_card = make_card(container)
+make_section_title(alarm_card, "⏰  ALARM")
+make_hint(alarm_card, "Enter time in 24-hour format, e.g. 21:45")
+alarm_entry = ttk.Entry(alarm_card)
+alarm_entry.pack(fill="x")
+
+# --- Stopwatch card ---
+stopwatch_card = make_card(container)
+make_section_title(stopwatch_card, "⏱  STOPWATCH")
+stopwatch_label = tk.Label(stopwatch_card, text="00:00:00", font=(FONT_FAMILY, 26, "bold"))
+stopwatch_label.pack(pady=(6, 10))
+ttk.Button(stopwatch_card, text="Reset", command=reset_stopwatch).pack()
+
+# --- World clock card ---
+world_card = make_card(container)
+make_section_title(world_card, "🌍  WORLD CLOCK")
+make_hint(world_card, "Select a city / timezone")
+timezone_combo = ttk.Combobox(world_card, values=TIMEZONES, state="readonly")
+timezone_combo.set(TIMEZONES[0])
+timezone_combo.pack(fill="x", pady=(0, 10))
+ttk.Button(world_card, text="Show World Time", command=show_world_time).pack()
+world_label = tk.Label(world_card, font=(FONT_FAMILY, 22, "bold"))
+world_label.pack(pady=(10, 0))
+
+# --- Voice + calendar card ---
+extra_card = make_card(container, pad_y=(0, 0))
+btn_row = tk.Frame(extra_card)
+btn_row.pack(fill="x")
+btn_row.columnconfigure(0, weight=1)
+btn_row.columnconfigure(1, weight=1)
+ttk.Button(btn_row, text="🔊 Speak Time", command=speak_time).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+ttk.Button(btn_row, text="📅 Calendar", command=show_calendar).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+calendar_label = tk.Label(extra_card, font=(FONT_FAMILY, 12))
+calendar_label.pack(pady=(12, 0))
+
+
+# ================= START =================
+
+apply_theme()        # paint the initial theme
+update_clock()        # start updating clock every second
+check_alarm()          # start checking alarm every second
+stopwatch()            # start stopwatch counting
 
 root.mainloop()
